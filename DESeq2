@@ -262,9 +262,14 @@ write.csv(res_sig,"res_sig.csv")
 
 
 #######reference#######
+https://lashlock.github.io/compbio/R_presentation.html
+https://www.jianshu.com/p/f685149ea247
+http://www.360doc.com/content/19/1224/14/68068867_881789444.shtml
+https://www.jianshu.com/p/26511d3360c8
+https://www.jianshu.com/p/6dcceba1f917
 http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
-
-
+https://www.jianshu.com/p/b55276e46f0c
+https://zhuanlan.zhihu.com/p/59731307
 
 
 ###########plotPCA###########
@@ -303,11 +308,6 @@ plotPCA(DESeqTrannsform(nor), intgroup=c("Treatment"))
 plotPCA(vsd, intgroup=c("Treatment"))
 
 plotPCA(rld, intgroup=c("Treatment"))
-
-
-
-
-
 
 
 
