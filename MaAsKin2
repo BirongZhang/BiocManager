@@ -1,0 +1,151 @@
+
+if(!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("Maaslin2")
+library(Maaslin2)
+
+
+setwd("/Users/birongzhang/Downloads/MaAsLin2")
+
+############################## new_metadata.tsv" ##############################
+input_data <- "feature-table.tsv"
+input_metadata <- "new_metadata.tsv"
+
+
+df_input_data = read.table(file = input_data, header = TRUE, sep = "\t")
+df_input_data[1:5, 1:5]
+
+df_input_metadata = read.table(file = input_metadata, header = TRUE, sep = "\t")
+df_input_metadata[1:5, 1:5]
+
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_Age_HLA_maxsignificance0.05', 
+  min_abundance = 0.001,
+  max_significance = 0.05,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','Age', 'HLA_Risk_Group'))
+
+
+input_data <- "T-relative_abundance_level3.tsv"
+input_metadata <- "new_metadata.tsv"
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_Age_HLA_maxsignificance0.15', 
+  min_abundance = 0.001,
+  max_significance = 0.15,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','Age', 'HLA_Risk_Group'))
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_Age_HLA_maxsignificance0.25', 
+  min_abundance = 0.001,
+  max_significance = 0.25,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','Age', 'HLA_Risk_Group'))
+
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_Age_maxsignificance0.05', 
+  min_abundance = 0.001,
+  max_significance = 0.05,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','Age'))
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_Age_maxsignificance0.15', 
+  min_abundance = 0.001,
+  max_significance = 0.15,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','Age'))
+
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_HLA_maxsignificance0.05', 
+  min_abundance = 0.001,
+  max_significance = 0.05,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','HLA_Risk_Group'))
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetes_HLA_maxsignificance0.15', 
+  min_abundance = 0.001,
+  max_significance = 0.15,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Diabetes','HLA_Risk_Group'))
+
+############################## input_metadata <- "metadata_D.tsv" ##############################
+
+df_input_data[1:5, 1:5]
+input_metadata <- "metadata_D.tsv"
+
+df_input_metadata = read.table(file = input_metadata, header = TRUE, sep = "\t")
+df_input_metadata[1:5, 1:5]
+nrow(df_input_metadata)
+
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetesgroup_Age_HLA_Time_DODX_maxsignificance0.05',
+  min_abundance = 0.001,
+  max_significance = 0.05,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Age', 'HLA_Risk_Group','Time_DODX'))
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetesgroup_Age_HLA_Time_DODX_maxsignificance0.15',
+  min_abundance = 0.001,
+  max_significance = 0.15,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Age', 'HLA_Risk_Group','Time_DODX'))
+
+input_data <- "T-relative_abundance_otu-table_minfrequency10_minsamples2.tsv"
+input_metadata <- "metadata_D.tsv"
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetesgroup_Age_Time_DODX_maxsignificance0.05',
+  min_abundance = 0.001,
+  max_significance = 0.05,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Age','Time_DODX'))
+
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetesgroup_Age_Time_DODX_maxsignificance0.15',
+  min_abundance = 0.001,
+  max_significance = 0.15,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Age','Time_DODX'))
+
+fit_data <- Maaslin2(
+  input_data, 
+  input_metadata, 
+  'demo_output-Diabetesgroup_Age_Time_DODX_maxsignificance0.25',
+  min_abundance = 0.001,
+  max_significance = 0.25,
+  random_effects = c('Sample_ID'),
+  fixed_effects = c('Age','Time_DODX'))
+
+
+############################## reference ##############################
+https://huttenhower.sph.harvard.edu/maaslin/
