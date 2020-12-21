@@ -1,0 +1,348 @@
+############# Deseq2 for phyloseq data #############
+
+
+#OTU differential abundance testing with DESeq2
+#using data without rarefaction: physeq
+#Convert the phyloseq object to a DESeqDataSet and run DESeq2
+
+BiocManager::install("DESeq2")
+library("DESeq2")
+
+library(qiime2R)
+
+#import data
+setwd("/Users/birongzhang/Downloads/physeq_table10/data_table10")
+getwd
+
+BiocManager::install("phyloseq")
+library("phyloseq")
+
+physeq<-qza_to_phyloseq(
+    features = "table10.qza",
+    tree = "rooted_tree.qza",
+    taxo = "classified_rep_seqs-233.qza",
+    metadata = "merge_map.txt"
+    )
+physeq
+ 
+install.packages("dplyr")
+library("dplyr")
+
+#converting counts to integer mode
+ds = phyloseq_to_deseq2(physeq, ~ Treatment)
+ds=estimateSizeFactors(ds,type = c("poscounts"))
+ds.nm<-counts(ds, normalized=TRUE)
+ds.nm.anno<-cbind(ds.nm, as(tax_table(physeq)[rownames(ds.nm), ], "matrix"))
+write.csv(ds.nm.anno,"normalisedCounts.csv")
+
+#PCoA
+ds = phyloseq_to_deseq2(physeq, ~ Treatment)
+ntd <- normTransform(ds)
+plotPCA(ntd, intgroup=c("Treatment"))
+
+design(ds) <- ~1
+ds=estimateSizeFactors(ds,type = c("poscounts"))
+vsd <- varianceStabilizingTransformation(ds, blind=FALSE)
+plotPCA(vsd, intgroup=c("Treatment"))
+
+#heatmap
+sampleDists <- dist(t(assay(vsd)))
+library("RColorBrewer")
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$Treatment)
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(219)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+
+
+BiocManager::install("genefilter")
+library("genefilter")
+topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 19)
+mat  <- assay(vsd)[ topVarGenes, ]
+mat  <- mat - rowMeans(mat)
+anno <- as.data.frame(colData(vsd)[, c("Treatment","Treatment")])
+pheatmap(mat,annotation_col = anno, width = 300)
+
+
+
+#######
+ds = DESeq(ds)
+alpha = 0.05
+###compare treatment
+res = results(ds, contrast=c("Treatment", "D","ND"), alpha=alpha)
+res = res[order(res$padj, na.last=NA), ]
+res <- as.data.frame(res)
+write.csv(res,"res.csv")
+
+
+
+
+install.packages("dplyr")
+library("dplyr")
+res_sig<-res %>% dplyr::filter((log2FoldChange>=1 | log2FoldChange <= (-1)) & padj < 0.05)
+write.csv(res_sig,"res_sig.csv")
+
+res_sig = cbind(as(res_sig, "data.frame"), as(tax_table(physeq)[rownames(res_sig), ], "matrix"))
+write.csv(res_sig,"res_sig.csv")
+
+#Make a genus vs log2FC plot of the significant OTUs
+
+DEGTreatmentGenus<-ggplot(res_sig, aes(x=Genus, y=log2FoldChange, color=Genus)) +
+  geom_jitter(size=3, width = 0.2) +
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5),plot.title = element_text(face = "bold"))
+
+print(DEGTreatmentGenus)
+ggsave("DEGTreatmentGenus.png", DEGTreatmentGenus, dpi=500, width=12)     
+
+
+
+DEGTreatmentphylum<-ggplot(res_sig, aes(x=Phylum, y=log2FoldChange, color=Phylum)) +
+  geom_jitter(size=3, width = 0.2) +
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5),plot.title = element_text(face = "bold"))
+
+print(DEGTreatmentphylum)
+ggsave("DEGTreatmentphylum.png", DEGTreatmentphylum, dpi=500, width=12)    
+
+
+
+res <- results(ds)
+res
+
+res <- results(ds, name="Treatment_ND_vs_D")
+res <- results(ds, contrast=c("Treatment","ND","D"))
+
+
+
+BiocManager::install("apeglm")
+library("apeglm")
+resLFC <- lfcShrink(ds, coef="Treatment_ND_vs_D", type="apeglm")
+resLFC 
+
+resNorm <- lfcShrink(dds, coef=2, type="normal")
+resAsh <- lfcShrink(dds, coef=2, type="ashr")
+par(mfrow=c(1,3), mar=c(4,4,2,1))
+xlim <- c(1,1e5); ylim <- c(-3,3)
+plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm")
+plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
+plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
+
+# p-values and adjusted p-values
+
+resOrdered <- res[order(res$pvalue),]
+summary(res)
+sum(res$padj<0.01, na.rm=TRUE)
+
+res05 <- results(ds,alpha=0.05)
+summary(res05)
+sum(res$padj<0.05, na.rm=TRUE)
+
+#exploring and exporting results
+
+# MA-plot
+
+plotMA(res, ylim=c(-2,2))
+plotMA(resLFC , ylim=c(-2,2))
+
+idx <- identify(res$baseMean, res$log2FoldChange)
+rownames(res)[idx]
+
+rld <- rlog(ds, blind=FALSE)
+
+
+
+#volcano plot 火山图
+ds = phyloseq_to_deseq2(physeq, ~ Treatment)
+ds=estimateSizeFactors(ds,type = c("poscounts"))
+ds = DESeq(ds)
+
+res2 <- results(ds, contrast = c("Treatment", "D","ND"))
+res2 <- lfcShrink(ds, contrast = c("Treatment", "ND", "D"), res = res2) ???
+res3 <- as.data.frame(res2)
+
+
+Data <- res3
+Data <- Data[!is.na(Data$padj),]
+
+#计算上下调关系
+Data$threshold = factor(ifelse(
+  Data$padj < 0.05 & abs(Data$log2FoldChange) >= 1,
+  ifelse(Data$log2FoldChange >= 1, 'Up', 'Down'),'-'),
+ levels = c('Up', 'Down', '-'))
+
+Data$Gene <- rownames(Data)
+
+install.packages("ggplot2")
+library(ggplot2)
+library(ggrepel)
+
+p <- ggplot(Data, aes(x = log2FoldChange, y = -log10(padj), color=threshold))+
+  geom_point(alpha=0.5,size=3,shape=19,fill='white')+
+  geom_text_repel(data=Data[Data$padj < 0.05 & abs (Data$log2FoldChange) >=1,], aes(label = Gene), size=3, segment.color="black", show.legend =FALSE)+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab('-log10(p.adjusted Value')+
+  xlab('log2(FoldChange)')+
+  geom_vline(xintercept = c(-1,1), lty = 3, col ="black", lwd =0.5)+
+  geom_hline(yintercept = -log10(0.01), lty = 3, col ="black", lwd =0.5)
+
+ggsave("FC_padj_with_label.png", p)
+
+
+
+p <- ggplot(Data, aes(x = log2FoldChange, y = -log10(padj), color=threshold))+
+  geom_point(alpha=0.5,size=3,shape=19,fill='white')+
+  theme_bw()+
+  theme(legend.title = element_blank())+
+  ylab('-log10(p.adjusted Value)')+
+  xlab('log2(FoldChange)')+
+  geom_vline(xintercept = c(-1,1), lty = 3, col ="black", lwd =0.5)+
+  geom_hline(yintercept = -log10(0.05), lty = 3, col ="black", lwd =0.5)
+
+ggsave("FC_padj_without_label.png", p)
+
+
+
+################Plot counts
+It can also be useful to examine the counts of reads for a single gene across the groups. A simple function for making this plot is plotCounts, which normalizes counts by the estimated size factors (or normalization factors if these were used) and adds a pseudocount of 1/2 to allow for log scale plotting. The counts are grouped by the variables in intgroup, where more than one variable can be specified. Here we specify the gene which had the smallest p value from the results table created above. You can select the gene to plot by rowname or by numeric index.
+
+# 1  
+d <- plotCounts(ds, gene="82818c802d92a11b515a7a6d7dfab791", intgroup="Treatment", returnData=TRUE)
+p1 <- ggplot(d, aes(x=Treatment, y=count)) + geom_point(position=position_jitter(w=0.1,h=0)) + ggtitle('82818c802d92a11b515a7a6d7dfab791') + theme(plot.title = element_text(hjust = 0.5) + scale_y_log10(breaks=c(0,50,400)))
+
+ggsave("82818c802d92a11b515a7a6d7dfab791.png", p1, dpi=300, width=6)
+
+# 2
+d <- plotCounts(ds, gene="25f2d31033cecad0c46b328089f4156a", intgroup="Treatment", returnData=TRUE)
+p1 <- ggplot(d, aes(x=Treatment, y=count)) + geom_point(position=position_jitter(w=0.1,h=0)) + ggtitle('25f2d31033cecad0c46b328089f4156a') + theme(plot.title = element_text(hjust = 0.5) + scale_y_log10(breaks=c(0,50,400)))
+
+
+
+#############Deseq2 for normal data#############
+
+setwd("/Users/birongzhang/Downloads/James/DESeq2/pathway_abundance_minfrequency10000_minsamples170")
+
+counts <- read.table("feature-table_pathway_abundance_minfrequency10000_minsamples170.tsv", header = T, sep="\t", row.names="Sample_ID")
+counts <- read.table("feature-table_pathway_abundance_minfrequency10000_minsamples170.tsv", header = T, sep="\t", row.names= 1)
+counts[1:3,1:3]
+colnames(counts)
+ncol(counts)
+
+
+coldata <- read.table("merge_map.tsv", header = TRUE, sep = "\t",row.names = 1)
+coldata<-coldata[colnames(counts),]
+coldata[1:3,1:3]
+rownames(coldata)
+nrow(coldata)
+write.csv(coldata,"merge_map.csv")
+
+
+all((colnames(counts)==rownames(coldata))==T)
+
+ds <- DESeqDataSetFromMatrix(countData = counts,
+                             colData = coldata,
+                             design = ~ Treatment)
+
+ds=estimateSizeFactors(ds,type = c("poscounts"))
+
+ds = DESeq(ds)
+alpha=0.05
+res = results(ds, contrast=c("Treatment", "D","ND"), alpha=alpha)
+res<-as.data.frame(res)
+write.csv(res,"res.csv")
+
+install.packages("dplyr")
+library("dplyr")
+res_sig<-res %>% dplyr::filter((log2FoldChange>=1 | log2FoldChange <= (-1)) & padj < 0.05)
+write.csv(res_sig,"res_sig.csv")
+
+
+
+#######reference#######
+http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
+
+
+
+###########plotPCA###########
+res <- res[order(res$padj),]
+head(res)
+
+par(mfrow=c(1,1))
+# Make a basic volcano plot
+with(res, plot(log2FoldChange, -log10(pvalue), pch=20, main="Volcano plot", xlim=c(-3,3)))
+
+# Add colored points: blue if padj<0.01, red if log2FC>1 and padj<0.05)
+with(subset(res, padj<.01 ), points(log2FoldChange, -log10(pvalue), pch=20, col="blue"))
+with(subset(res, padj<.01 & abs(log2FoldChange)>2), points(log2FoldChange, -log10(pvalue), pch=20, col="red"))
+
+
+vsdata <- vst(ds, blind=FALSE)
+plotPCA(vsdata, intgroup="Treatment") 
+
+
+
+ds<-estimateSizeFactors(ds)
+raw<-SummarizedExperiment(counts(ds, normalized=FALSE), colData=colData(ds))
+nor<-SummarizedExperiment(counts(ds, normalized=TRUE), colData=colData(ds))
+
+
+vsd<- vst(ds)
+rld<- rlog(ds)
+
+vsd <- varianceStabilizingTransformation(ds)
+
+pdf("PCA.pdf")
+plotPCA(DESeqTrannsform(raw), intgroup=c("Treatment"))
+
+plotPCA(DESeqTrannsform(nor), intgroup=c("Treatment"))
+
+plotPCA(vsd, intgroup=c("Treatment"))
+
+plotPCA(rld, intgroup=c("Treatment"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
