@@ -1,0 +1,443 @@
+# Install phyloseq from Bioconductor
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+ #check the version of BioManger
+BiocManager::install()
+
+#install package "phyloseq"
+BiocManager::install("phyloseq")
+library("phyloseq")
+
+
+#install other required package for "phyloseq"
+install.packages("magrittr", type = "binary")
+library(magrittr)
+
+install.packages("vctrs", type = "binary")
+library(vctrs)
+
+library(phyloseq)
+packageVersion("phyloseq")
+
+install.packages("ggplot2")
+library(ggplot2)
+
+install.packages("reshape2")
+library(reshape2)
+
+install.packages("devtools")
+devtools::install_github("hadley/devtools")
+
+devtools::install_github("gmteunisse/Fantaxtic")
+library(fantaxtic)
+
+# Install the rest of the packages from CRAN
+install.packages(c("vegan", "metacoder", "taxa", "ggplot2", "dplyr", "readr", "stringr", "agricolae", "ape"), repos = "http://cran.rstudio.com", dependencies = TRUE)
+
+
+
+library("biomformat")
+library("lattice")
+library("permute")
+library("vegan")
+
+library("grid")
+library("magrittr")
+
+library("stats")
+
+install.packages("dplyr")
+library("dplyr")
+
+library("plyr")
+library('stringr')
+
+install.packages("broom")
+library("broom")
+
+
+install.packages("readxl")
+library("readxl")
+
+install.packages("tidyverse")
+library("tidyverse")
+
+
+install.packages(" ", type = "binary")
+
+BiocManager::install("DESeq2")
+library("DESeq2")
+
+
+#install.packages(devtools)
+install.packages("devtools")
+devtools::install_github("hadley/devtools")
+
+
+devtools::install_github("gmteunisse/Fantaxtic")
+library(fantaxtic)
+
+# install qiime2R
+if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
+devtools::install_github("jbisanz/qiime2R")
+library(qiime2R)
+
+
+#Load Data into PhyloSeq Object
+
+setwd("/Users/birongzhang/Downloads/James/DESeq2/phyloseq_table/data")
+getwd
+
+#import data(1)
+# qza_to_phyloseq ~ qiime2R
+
+library(qiime2R)
+
+physeq<-qza_to_phyloseq(
+    features = "table.qza",
+    tree = "rooted_tree.qza",
+    taxo = "classified_rep_seqs-233.qza",
+    metadata = "merge_map.txt"
+    )
+
+#import data(2)
+biom_data <- import_biom(BIOMfilename = "table-with-taxonomyv2.biom, 
+                         treefilename = "tree.nwk")
+
+
+#import data(3)
+otufile <- "table.tsv"
+mapfile <- "merge_map.tsv"
+trefile <- "tree.nwk"
+rs_file <- "ref-sequences.fasta"
+
+qiimedata = import_qiime(otufile, mapfile, trefile, rs_file)
+
+
+physeq
+setwd("/Users/birongzhang/Downloads/James/DESeq2/phyloseq_table")
+
+
+#"Kingdom" "Phylum"  "Class"   "Order"   "Family"  "Genus"   "Species"
+colnames(tax_table(physeq))
+colnames(tax_table(physeq))= c("Kingdom","Phylum","Class","Order","Family","Genus", "Species")
+rank_names(physeq)
+
+# add taxonomy description on otu_table
+absolute_OTU_table-with-taxa<-cbind(otu_table(physeq), as(tax_table(physeq)[rownames(otu_table(physeq)), ], "matrix"))
+write.csv(absolute_OTU_table-with-taxa,"absolute_OTU_table-with-taxa.csv")
+
+
+# Start to explore the data a bit 
+#Number of Samples in our Biom Table
+nsamples(physeq) #219
+
+# number of sequence variants
+ntaxa(physeq) #6600
+
+#summary statistics of sampling depth
+depths <- sample_sums(physeq)
+
+summary(depths)
+hist(depths)
+
+head(sample_data(physeq))
+summary(sample_data(physeq)$Treatment)
+
+
+#build the plot-Phylum-absolute
+p_Phylum_absolute<-plot_bar(physeq, x="Treatment", fill="Phylum")+
+                            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+absAbun_Phylum_absolute<-p_Phylum_absolute+ geom_bar(stat = "identity", position = "stack")
+                             
+print(absAbun_Phylum_absolute)
+ggsave("absAbun_Phylum_absolute.png", absAbun_Phylum_absolute, dpi=300, width=6)
+
+#build the plot-Class-absolute
+p_Class_absolute<-plot_bar(physeq, x="Treatment", fill="Class")+
+                           theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+absAbun_Class_absolute<-p_Class_absolute+ geom_bar(stat = "identity", position = "stack")
+
+print(absAbun_Class_absolute)
+ggsave("absAbun_Class_absolute.png", absAbun_Class_absolute, dpi=300, width=6)
+
+
+#to calculate percent relative abudance
+physeq.percent = transform_sample_counts(physeq, function(x) 100 * x/sum(x))
+relative_OTU_table<-cbind(otu_table(physeq.percent), as(tax_table(physeq.percent)[rownames(otu_table(physeq.percent)), ], "matrix"))
+write.csv(relative_OTU_table,"relative_OTU_table.csv")
+
+
+#build the plot-Phylum-relative
+p_Phylum_relative<-plot_bar(physeq.percent, x="Treatment", fill="Phylum")+
+                            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+absAbun_Phylum_relative<-p_Phylum_relative + geom_bar(stat = "identity", position = "stack")
+
+print(absAbun_Phylum_relative)
+ggsave("absAbun_Phylum_relative.png", absAbun_Phylum_relative, dpi=300, width=6)
+
+#build the plot-Class-relative
+p_Class_relative<-plot_bar(physeq.percent, x="Treatment", fill="Class")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+absAbun_Class_relative<-p_Class_relative + geom_bar(stat = "identity", position = "stack")
+print(absAbun_Class_relative)
+ggsave("absAbun_Class_relative.png", absAbun_Class_relative, dpi=300, width=6)
+
+
+#to calculate percent relative abudance
+physeq.percent = transform_sample_counts(physeq, function(x) 100 * x/sum(x))
+relOTU<-cbind(otu_table(physeq.percent), as(tax_table(physeq.percent)[rownames(otu_table(physeq.percent)), ], "matrix"))
+write.csv(relOTU,"relOTU.csv")
+
+
+####Get the top 10 relative abundant OTUs
+ps_tmp <- get_top_taxa(physeq_obj = physeq, n = 10, relative = TRUE, discard_other = FALSE, other_label = "Other")
+
+
+#Create labels for missing taxonomic ranks
+ps_tmp <- name_taxa(ps_tmp, label = "Unkown", species = T, other_label = "Other")
+
+
+#Generate a barplot that is colored by Phylum and labeled by Species, coloring
+#collapsed taxa grey.
+png("top10species.png",width=3000, height=2000,res=300)
+fantaxtic_bar(ps_tmp, color_by = "Phylum", label_by = "Species",facet_by="Treatment",other_label = "Other")
+dev.off()
+
+
+# Subset further to top 3 phyla.
+top3ph <- sort(tapply(taxa_sums(physeq), tax_table(physeq.percent)[, "Phylum"], sum), decreasing = TRUE)[1:3]
+
+###extract the top 3 most abundant phyla
+Firmicutes.ph <- subset_taxa(physeq.percent, Phylum %in% c("Firmicutes"))
+relOTU.Firmicutes<-cbind(otu_table(Firmicutes.ph), as(tax_table(Firmicutes.ph)[rownames(otu_table(Firmicutes.ph)), ], "matrix"))
+write.csv(relOTU.Firmicutes,"relOTU.FirmicutesPH.csv")
+
+Proteobacteria.ph <- subset_taxa(physeq.percent, Phylum %in% c("Proteobacteria"))
+relOTU.Proteobacteria<-cbind(otu_table(Proteobacteria.ph), as(tax_table(Proteobacteria.ph)[rownames(otu_table(Proteobacteria.ph)), ], "matrix"))
+write.csv(relOTU.Proteobacteria,"relOTU.ProteobacteriaPH.csv")
+
+Actinobacteria.ph <- subset_taxa(physeq.percent, Phylum %in% c("Actinobacteria"))
+relOTU.Actinobacteria<-cbind(otu_table(Actinobacteria.ph), as(tax_table(Actinobacteria.ph)[rownames(otu_table(Actinobacteria.ph)), ], "matrix"))
+write.csv(relOTU.Actinobacteria,"relOTU.ActinobacteriaPH.csv")
+
+
+
+
+###compare two treatment in terms of Firmicutes
+Firmicutes.dat<-data.frame(cbind(colSums(otu_table(Firmicutes.ph)),sample_data(physeq.percent)$Treatment))
+colnames(Firmicutes.dat)<-c("relOTU","Treatment")
+pairwise.wilcox.test(Firmicutes.dat$relOTU,Firmicutes.dat$Treatment,p.adj="none")
+
+###parameter test:t-test Firmicutes
+Firmicutes.dat1<-filter(Firmicutes.dat,Treatment== 1 | Treatment== 2)
+summary(lm(log2(relOTU)~Treatment,Firmicutes.dat1))
+
+###compare two treatment in terms of Proteobacteria
+Proteobacteria.dat<-data.frame(cbind(colSums(otu_table(Proteobacteria.ph)),sample_data(physeq.percent)$Treatment))
+colnames(Proteobacteria.dat)<-c("relOTU","Treatment")
+pairwise.wilcox.test(Proteobacteria.dat$relOTU,Proteobacteria.dat$Treatment,p.adj="none")
+
+###parameter test:t-test Proteobacteria
+Proteobacteria.dat1<-filter(Proteobacteria.dat,Treatment== 1 | Treatment== 2)
+summary(lm(log2(relOTU)~Treatment,Proteobacteria.dat1))
+
+
+###compare two treatment in terms of Actinobacteria
+Actinobacteria.dat<-data.frame(cbind(colSums(otu_table(Actinobacteria.ph)),sample_data(physeq.percent)$Treatment))
+colnames(Actinobacteria.dat)<-c("relOTU","Treatment")
+pairwise.wilcox.test(Actinobacteria.dat$relOTU,Actinobacteria.dat$Treatment,p.adj="none")
+
+###parameter test:t-test Actinobacteria
+Actinobacteria.dat1<-filter(Actinobacteria.dat,Treatment== 1| Treatment== 2)
+summary(lm(log2(relOTU)~Treatment,Actinobacteria.dat1))
+
+
+#--------merge samples based on Treatment
+#If you dont merge your percent abudnace will accumulate in a per sample basis
+physeqTreatment = merge_samples(physeq, "Treatment")
+
+#Repair the merged values associated with each surface after merge. 
+sample_data(physeqTreatment)$Treatment <- levels(sample_data(physeq)$Treatment)
+
+#transform to percent total abudnance in terms of Treatment
+physeqTreatment.percent = transform_sample_counts(physeqTreatment, function(x) 100 * x/sum(x))
+relAbun.otu<-t(otu_table(physeqTreatment.percent))
+relAbunOTU.anno<-cbind(relAbun.otu, as(tax_table(physeqTreatment.percent)[rownames(relAbun.otu), ], "matrix"))
+write.csv(relAbunOTU.anno,"relAbunOTU.csv")
+
+#percent abundance plot in terms of Phylum
+p<-plot_bar(physeqTreatment.percent, x="Treatment", fill="Phylum",title = "Summary")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+relAbun.phylum<-p + geom_bar(stat = "identity", position = "stack")+ylab("Percentage of Sequences")
+ggsave("relAbun.phylum.png", relAbun.phylum, dpi=300, width=6)
+
+
+#percent abundance plot in terms of Genus
+g<-plot_bar(physeqTreatment.percent, x="Treatment", fill="Genus",title = "Summary")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+relAbun.Genus<-g + geom_bar(stat = "identity", position = "stack")+ylab("Percentage of Sequences")
+ggsave("relAbun.Genus.png", relAbun.Genus, dpi=300, width=21)
+
+
+###export data in terms of Phylum and Treatment from plot_bar for building a plot in Prism
+pd.phylum <- p$data %>% 
+  as_tibble %>%
+  mutate(Phylum = as.character(Phylum)) %>%
+  replace_na(list(Phylum = "unknown"))
+
+
+pd.phylum.treatment <- pd.phylum %>%
+  group_by(Phylum,Treatment) %>%
+  summarize(Abundance = sum(Abundance))%>%
+  arrange(desc(Abundance))
+
+write.csv(pd.phylum.treatment  ,"relAbun.phylum.csv",row.names = F)
+
+
+
+###export data in terms of Genus and Treatment from plot_bar for building a plot in Prism
+pd.Genus <- p$data %>% 
+  as_tibble %>%
+  mutate(Genus = as.character(Genus)) %>%
+  replace_na(list(Genus = "unknown"))
+
+pd.Genus.treatment <- pd.Genus %>%
+  group_by(Genus,Treatment) %>%
+  summarize(Abundance = sum(Abundance))%>%
+  arrange(desc(Abundance))
+
+write.csv(pd.Genus.treatment ,"relAbun.Genus.csv",row.names = F)
+
+############################################
+#top 20 abundant bacteria
+#first we sort the data
+TopOTU = names(sort(taxa_sums(physeqTreatment.percent), TRUE)[1:20])
+#prune those OTUs
+top20 = prune_taxa(TopOTU, physeqTreatment.percent)
+relAbunTOP.otu<-t(otu_table(top20))
+relAbunTOP.anno<-cbind(relAbunTOP.otu, as(tax_table(top20)[rownames(relAbunTOP.otu), ], "matrix"))
+write.csv(relAbunTOP.anno,"relAbunOTUtop20.csv")
+
+#percent abundance plot 
+genus<-plot_bar(top20, x="Treatment", fill="Genus",title = "")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+relAbun.top20<-genus + geom_bar(stat = "identity", position = "stack")+ylab("Percentage of Sequences")
+ggsave("relAbun.top20.png", relAbun.top20, dpi=300, width=6)
+relAbun.top20
+
+
+phylum<-plot_bar(top20, x="Treatment", fill="Phylum",title = "")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+relAbun.top20.phylum<-phylum + geom_bar(stat = "identity", position = "stack")+ylab("Percentage of Sequences")
+ggsave("relAbun.top20.phylum.png", relAbun.top20.phylum, dpi=300, width=6)
+relAbun.top20.phylum
+
+
+install.packages("Rarefy")
+library("Rarefy")
+
+#Alpha and Beta diversity
+# It is always important to set a seed when you subsample so your result is replicable . Here we will be 
+# subsampling libraries with replacement 
+
+physeq.rarefy = rarefy_even_depth(physeq, rngseed=123, sample.size=0.9*min(sample_sums(physeq)), replace=F)
+physeq.rarefy
+AlphaDiver<-plot_richness(physeq.rarefy, x = "Treatment", color='Treatment') + geom_boxplot()+ggtitle('Treatment')
+ggsave("AlphaDiver.png", AlphaDiver, dpi=300, width=12)
+
+#using the Wilcoxon rank-sum test (Mann-Whitney) to test the significance
+rich <- estimate_richness(physeq.rarefy)
+write.csv(rich,"richness.csv")
+
+res.aov <- aov(log2(rich$Chao1) ~ sample_data(physeq.rarefy)$Treatment)
+summary(res.aov)
+
+TukeyHSD(res.aov)
+pairwise.t.test(log2(rich$Chao1),sample_data(physeq.rarefy)$Treatment,p.adjust.method = "BH")
+pairwise.wilcox.test(rich$Observed, sample_data(physeq.rarefy)$Treatment,p.adjust.method = "BH")
+pairwise.wilcox.test(rich$Chao1, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+pairwise.wilcox.test(rich$ACE, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+pairwise.wilcox.test(rich$Shannon, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+pairwise.wilcox.test(rich$Simpson, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+pairwise.wilcox.test(rich$InvSimpson, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+pairwise.wilcox.test(rich$Fisher, sample_data(physeq.rarefy)$Treatment,method = c("none"))
+
+#Betadiversity and PERMANOVA
+# PCoA plot using the unweighted UniFrac as distance
+wunifrac_dist = phyloseq::distance(physeq.rarefy, method="unifrac", weighted=F)
+ordination = ordinate(physeq.rarefy, method="PCoA", distance=wunifrac_dist)
+
+Treatment.pcoa.uwuni<-plot_ordination(physeq.rarefy, ordination, color="Treatment")+
+  geom_hline(yintercept=0, linetype=2) + geom_vline(xintercept=0,linetype=2)+
+  geom_point(size = 3) + theme(aspect.ratio=1)+
+  ggtitle("PCoA Unweighted Unifrac")
+
+ggsave("Treatment.pcoa.uwuni.png", Treatment.pcoa.uwuni, dpi=300, width=6)
+write.csv(Treatment.pcoa.uwuni$data,"data4BetaPlot.csv")
+
+jaccard_dist = phyloseq::distance(physeq.rarefy, method="jaccard", weighted=F)
+bray_dist = phyloseq::distance(physeq.rarefy, method="bray", weighted=F)
+
+
+#Test whether the 2 Treatments differ significantly from each other using the permutational ANOVA (PERMANOVA) analysis
+library(permute)
+library(lattice)
+library(vegan)
+
+
+adn=adonis(wunifrac_dist ~ sample_data(physeq.rarefy)$Treatment,permutations=1000, method='unifrac', weighted=FALSE)
+adn$aov.tab
+
+#Permutational multivariate analysis of variance
+df = as(sample_data(physeq.rarefy ), "data.frame") 
+# this is our mapping file inside our phyloseq object being converted to a dataframe
+d = phyloseq::distance(physeq.rarefy , "unifrac", weighted=FALSE) # distance matrix
+set.seed(2)
+a=adonis(d ~ Treatment, df, permutations=1000, method='unifrac', weighted=FALSE)
+a$aov.tab
+
+
+
+
+#transform_sample_counts
+data(esophagus)
+otu_table(esophagus)
+
+x1 = transform_sample_counts(esophagus, threshrankfun(50))
+head(otu_table(x1), 10)
+
+x2 = transform_sample_counts(esophagus, rank)
+head(otu_table(x2), 10)
+
+identical(x1, x2)
+
+x3 = otu_table(esophagus) + 5
+x3 = transform_sample_counts(x3, log)
+
+head(otu_table(x3), 10)
+x4 = transform_sample_counts(esophagus, function(x) round(x^2, 0))
+head(otu_table(x4), 10)
+
+x5 = transform_sample_counts(esophagus, function(x) 100 * x/sum(x))
+head(otu_table(x5), 10)
+
+x6 = transform_sample_counts(esophagus, function(x) x/sum(x))
+head(otu_table(x6), 10)
+
+norm <- function(x) sqrt(x%*%x)
+norm(2)
+
+f <- function(x, y){ z <- x^2 + y^2; x+y+z }
+f(0:2,0:2)
+
+(function(x, y){ z <- x^2 + y^2; x+y+z })(0:7, 0:7)
+
+###################################### reference ######################################
+https://forum.qiime2.org/t/tutorial-integrating-qiime2-and-r-for-data-visualization-and-analysis-using-qiime2r/4121
+https://yzlabwork.slack.com/files/UJGSJ52AX/F01EY6CQ1K5/phyloseqanalysis15032020.r?origin_team=TJU986FV3&origin_channel=D01BZMBF81M
+https://joey711.github.io/phyloseq/import-data.html
+https://github.com/pjtorres/Bioinformatics-BC/blob/master/Phyloseq/QIIME2_Phyloseq/Exporting%20QIIME2%20data%20for%20Phyloseq%20Analysis%202018.ipynb
+https://micca.readthedocs.io/en/latest/phyloseq.html
+https://bioconductor.org/help/course-materials/2017/BioC2017/Day1/Workshops/Microbiome/MicrobiomeWorkflowII.html#abstract
+https://joey711.github.io/phyloseq/distance.html
