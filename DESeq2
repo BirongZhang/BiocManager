@@ -223,41 +223,95 @@ p1 <- ggplot(d, aes(x=Treatment, y=count)) + geom_point(position=position_jitter
 
 #############Deseq2 for normal data#############
 
-setwd("/Users/birongzhang/Downloads/James/DESeq2/pathway_abundance_minfrequency10000_minsamples170")
+BiocManager::install("DESeq2")
+library(DESeq2)
 
-counts <- read.table("feature-table_pathway_abundance_minfrequency10000_minsamples170.tsv", header = T, sep="\t", row.names="Sample_ID")
-counts <- read.table("feature-table_pathway_abundance_minfrequency10000_minsamples170.tsv", header = T, sep="\t", row.names= 1)
+BiocManager::install("tximport")
+library("tximport")
+
+BiocManager::install("apeglm")
+library(apeglm)
+
+library(tidyverse)
+library(RColorBrewer)
+library(pheatmap)
+library(DEGreport)
+library(ggplot2)
+library(ggrepel)
+
+BiocManager::install('EnhancedVolcano')
+library('EnhancedVolcano')
+
+
+setwd("/Users/birongzhang/Downloads/James/James_new/DESeq2")
+
+counts <- read.table("Picrust2/pathway_abundance_descrip.tsv", header = T, sep="\t", row.names = 1)
+counts <- read.table("Picrust2/pathway_abundance.tsv", header = T, sep="\t", row.names = 1)
+counts<- round(counts)
 counts[1:3,1:3]
-colnames(counts)
 ncol(counts)
 
 
-coldata <- read.table("merge_map.tsv", header = TRUE, sep = "\t",row.names = 1)
+
+coldata <- read.table("merge_map.csv", header = TRUE, sep = ",",row.names = 1)
 coldata<-coldata[colnames(counts),]
 coldata[1:3,1:3]
-rownames(coldata)
-nrow(coldata)
 write.csv(coldata,"merge_map.csv")
-
 
 all((colnames(counts)==rownames(coldata))==T)
 
+setwd("/Users/birongzhang/Downloads/James/James_new/DESeq2/Picrust2")
+coldata$Treatment = factor(coldata$Treatment, levels=c("D","ND")) ## 设置柱条的顺序
 ds <- DESeqDataSetFromMatrix(countData = counts,
                              colData = coldata,
                              design = ~ Treatment)
-
-ds=estimateSizeFactors(ds,type = c("poscounts"))
+ds
+ds <- estimateSizeFactors(ds,type = c("poscounts"))
 
 ds = DESeq(ds)
 alpha=0.05
 res = results(ds, contrast=c("Treatment", "D","ND"), alpha=alpha)
-res<-as.data.frame(res)
+res<-as.data.frame(res) %>% arrange(padj)
 write.csv(res,"res.csv")
 
-install.packages("dplyr")
-library("dplyr")
-res_sig<-res %>% dplyr::filter((log2FoldChange>=1 | log2FoldChange <= (-1)) & padj < 0.05)
-write.csv(res_sig,"res_sig.csv")
+res <- read.table("res.csv", header = T, sep=",", row.names = 1)
+res_sig_up<-res %>% dplyr::filter(log2FoldChange>=1 & padj < 0.05) %>% arrange(padj)
+write.csv(res_sig_up,"res_sig_up.csv")
+
+res_sig_down<-res %>% dplyr::filter(log2FoldChange <= (-1) & padj < 0.05) %>% arrange(padj)
+write.csv(res_sig_down,"res_sig_down.csv")
+
+# PCA plot
+vsd <- varianceStabilizingTransformation(ds)
+
+p<-plotPCA(vsd, intgroup = c("Treatment"))+
+  theme_bw()+  
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(),        
+        axis.line = element_line(colour = "black",size=2),
+        plot.title = element_text(hjust = 0.5))+
+  labs(title = "PCA plot")
+p
+ggsave("PCAplot.png", p, dpi=300, width=6)
+
+# volcano plot
+p<- EnhancedVolcano(res,
+               lab = rownames(res),
+                x = 'log2FoldChange',
+                y = 'padj',
+                title = 'D vs ND',
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 3.0,
+                labSize = 3.0,
+                col=c('black', 'blue', 'green', 'red3'),
+                shape = 8,
+                colAlpha = 1)
+p
+ggsave("Volcanoplot.png", p, dpi=300, width=8)
+
+
 
 
 
