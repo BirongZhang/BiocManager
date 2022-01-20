@@ -1,402 +1,398 @@
-############# Deseq2 for phyloseq data #############
 
-
-#OTU differential abundance testing with DESeq2
-#using data without rarefaction: physeq
-#Convert the phyloseq object to a DESeqDataSet and run DESeq2
-
-BiocManager::install("DESeq2")
-library("DESeq2")
-
-library(qiime2R)
-
-#import data
-setwd("/Users/birongzhang/Downloads/physeq_table10/data_table10")
-getwd
-
-BiocManager::install("phyloseq")
-library("phyloseq")
-
-physeq<-qza_to_phyloseq(
-    features = "table10.qza",
-    tree = "rooted_tree.qza",
-    taxo = "classified_rep_seqs-233.qza",
-    metadata = "merge_map.txt"
-    )
-physeq
- 
-install.packages("dplyr")
-library("dplyr")
-
-#converting counts to integer mode
-ds = phyloseq_to_deseq2(physeq, ~ Treatment)
-ds=estimateSizeFactors(ds,type = c("poscounts"))
-ds.nm<-counts(ds, normalized=TRUE)
-ds.nm.anno<-cbind(ds.nm, as(tax_table(physeq)[rownames(ds.nm), ], "matrix"))
-write.csv(ds.nm.anno,"normalisedCounts.csv")
-
-#PCoA
-ds = phyloseq_to_deseq2(physeq, ~ Treatment)
-ntd <- normTransform(ds)
-plotPCA(ntd, intgroup=c("Treatment"))
-
-design(ds) <- ~1
-ds=estimateSizeFactors(ds,type = c("poscounts"))
-vsd <- varianceStabilizingTransformation(ds, blind=FALSE)
-plotPCA(vsd, intgroup=c("Treatment"))
-
-#heatmap
-sampleDists <- dist(t(assay(vsd)))
-library("RColorBrewer")
-sampleDistMatrix <- as.matrix(sampleDists)
-rownames(sampleDistMatrix) <- paste(vsd$Treatment)
-colnames(sampleDistMatrix) <- NULL
-colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(219)
-pheatmap(sampleDistMatrix,
-         clustering_distance_rows=sampleDists,
-         clustering_distance_cols=sampleDists,
-         col=colors)
-
-
-
-BiocManager::install("genefilter")
-library("genefilter")
-topVarGenes <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 19)
-mat  <- assay(vsd)[ topVarGenes, ]
-mat  <- mat - rowMeans(mat)
-anno <- as.data.frame(colData(vsd)[, c("Treatment","Treatment")])
-pheatmap(mat,annotation_col = anno, width = 300)
-
-
-
-#######
-ds = DESeq(ds)
-alpha = 0.05
-###compare treatment
-res = results(ds, contrast=c("Treatment", "D","ND"), alpha=alpha)
-res = res[order(res$padj, na.last=NA), ]
-res <- as.data.frame(res)
-write.csv(res,"res.csv")
-
-
-
-
-install.packages("dplyr")
-library("dplyr")
-res_sig<-res %>% dplyr::filter((log2FoldChange>=1 | log2FoldChange <= (-1)) & padj < 0.05)
-write.csv(res_sig,"res_sig.csv")
-
-res_sig = cbind(as(res_sig, "data.frame"), as(tax_table(physeq)[rownames(res_sig), ], "matrix"))
-write.csv(res_sig,"res_sig.csv")
-
-#Make a genus vs log2FC plot of the significant OTUs
-
-DEGTreatmentGenus<-ggplot(res_sig, aes(x=Genus, y=log2FoldChange, color=Genus)) +
-  geom_jitter(size=3, width = 0.2) +
-  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5),plot.title = element_text(face = "bold"))
-
-print(DEGTreatmentGenus)
-ggsave("DEGTreatmentGenus.png", DEGTreatmentGenus, dpi=500, width=12)     
-
-
-
-DEGTreatmentphylum<-ggplot(res_sig, aes(x=Phylum, y=log2FoldChange, color=Phylum)) +
-  geom_jitter(size=3, width = 0.2) +
-  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5),plot.title = element_text(face = "bold"))
-
-print(DEGTreatmentphylum)
-ggsave("DEGTreatmentphylum.png", DEGTreatmentphylum, dpi=500, width=12)    
-
-
-
-res <- results(ds)
-res
-
-res <- results(ds, name="Treatment_ND_vs_D")
-res <- results(ds, contrast=c("Treatment","ND","D"))
-
-
-
-BiocManager::install("apeglm")
-library("apeglm")
-resLFC <- lfcShrink(ds, coef="Treatment_ND_vs_D", type="apeglm")
-resLFC 
-
-resNorm <- lfcShrink(dds, coef=2, type="normal")
-resAsh <- lfcShrink(dds, coef=2, type="ashr")
-par(mfrow=c(1,3), mar=c(4,4,2,1))
-xlim <- c(1,1e5); ylim <- c(-3,3)
-plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm")
-plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
-plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
-
-# p-values and adjusted p-values
-
-resOrdered <- res[order(res$pvalue),]
-summary(res)
-sum(res$padj<0.01, na.rm=TRUE)
-
-res05 <- results(ds,alpha=0.05)
-summary(res05)
-sum(res$padj<0.05, na.rm=TRUE)
-
-#exploring and exporting results
-
-# MA-plot
-
-plotMA(res, ylim=c(-2,2))
-plotMA(resLFC , ylim=c(-2,2))
-
-idx <- identify(res$baseMean, res$log2FoldChange)
-rownames(res)[idx]
-
-rld <- rlog(ds, blind=FALSE)
-
-
-
-#volcano plot 火山图
-ds = phyloseq_to_deseq2(physeq, ~ Treatment)
-ds=estimateSizeFactors(ds,type = c("poscounts"))
-ds = DESeq(ds)
-
-res2 <- results(ds, contrast = c("Treatment", "D","ND"))
-res2 <- lfcShrink(ds, contrast = c("Treatment", "ND", "D"), res = res2) ???
-res3 <- as.data.frame(res2)
-
-
-Data <- res3
-Data <- Data[!is.na(Data$padj),]
-
-#计算上下调关系
-Data$threshold = factor(ifelse(
-  Data$padj < 0.05 & abs(Data$log2FoldChange) >= 1,
-  ifelse(Data$log2FoldChange >= 1, 'Up', 'Down'),'-'),
- levels = c('Up', 'Down', '-'))
-
-Data$Gene <- rownames(Data)
-
-install.packages("ggplot2")
-library(ggplot2)
-library(ggrepel)
-
-p <- ggplot(Data, aes(x = log2FoldChange, y = -log10(padj), color=threshold))+
-  geom_point(alpha=0.5,size=3,shape=19,fill='white')+
-  geom_text_repel(data=Data[Data$padj < 0.05 & abs (Data$log2FoldChange) >=1,], aes(label = Gene), size=3, segment.color="black", show.legend =FALSE)+
-  theme_bw()+
-  theme(legend.title = element_blank())+
-  ylab('-log10(p.adjusted Value')+
-  xlab('log2(FoldChange)')+
-  geom_vline(xintercept = c(-1,1), lty = 3, col ="black", lwd =0.5)+
-  geom_hline(yintercept = -log10(0.01), lty = 3, col ="black", lwd =0.5)
-
-ggsave("FC_padj_with_label.png", p)
-
-
-
-p <- ggplot(Data, aes(x = log2FoldChange, y = -log10(padj), color=threshold))+
-  geom_point(alpha=0.5,size=3,shape=19,fill='white')+
-  theme_bw()+
-  theme(legend.title = element_blank())+
-  ylab('-log10(p.adjusted Value)')+
-  xlab('log2(FoldChange)')+
-  geom_vline(xintercept = c(-1,1), lty = 3, col ="black", lwd =0.5)+
-  geom_hline(yintercept = -log10(0.05), lty = 3, col ="black", lwd =0.5)
-
-ggsave("FC_padj_without_label.png", p)
-
-
-
-################Plot counts
-It can also be useful to examine the counts of reads for a single gene across the groups. A simple function for making this plot is plotCounts, which normalizes counts by the estimated size factors (or normalization factors if these were used) and adds a pseudocount of 1/2 to allow for log scale plotting. The counts are grouped by the variables in intgroup, where more than one variable can be specified. Here we specify the gene which had the smallest p value from the results table created above. You can select the gene to plot by rowname or by numeric index.
-
-# 1  
-d <- plotCounts(ds, gene="82818c802d92a11b515a7a6d7dfab791", intgroup="Treatment", returnData=TRUE)
-p1 <- ggplot(d, aes(x=Treatment, y=count)) + geom_point(position=position_jitter(w=0.1,h=0)) + ggtitle('82818c802d92a11b515a7a6d7dfab791') + theme(plot.title = element_text(hjust = 0.5) + scale_y_log10(breaks=c(0,50,400)))
-
-ggsave("82818c802d92a11b515a7a6d7dfab791.png", p1, dpi=300, width=6)
-
-# 2
-d <- plotCounts(ds, gene="25f2d31033cecad0c46b328089f4156a", intgroup="Treatment", returnData=TRUE)
-p1 <- ggplot(d, aes(x=Treatment, y=count)) + geom_point(position=position_jitter(w=0.1,h=0)) + ggtitle('25f2d31033cecad0c46b328089f4156a') + theme(plot.title = element_text(hjust = 0.5) + scale_y_log10(breaks=c(0,50,400)))
-
-
-
-#############Deseq2 for normal data#############
-
-BiocManager::install("DESeq2")
+setwd("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2")
+### set up
+## DESeq2
 library(DESeq2)
-
-BiocManager::install("tximport")
-library("tximport")
-
-BiocManager::install("apeglm")
-library(apeglm)
-
 library(tidyverse)
-library(RColorBrewer)
-library(pheatmap)
-library(DEGreport)
 library(ggplot2)
-library(ggrepel)
+library(biomaRt)
 
-BiocManager::install('EnhancedVolcano')
-library('EnhancedVolcano')
+# PCA plot
+library(PCAtools)
+library(pcaExplorer)
+
+# volcano plot
+library(EnhancedVolcano)
 
 
-setwd("/Users/birongzhang/Downloads/James/James_new/DESeq2")
+### import data
+coldata <- read.table("clin.csv",header = T,sep = ",", row.names= 1)
+head(coldata)
+coldata$Treatment <- as.factor(coldata$Treatment)
+levels(coldata$Treatment)
+rownames(coldata) <- gsub("-",".",rownames(coldata))
 
-counts <- read.table("Picrust2/pathway_abundance_descrip.tsv", header = T, sep="\t", row.names = 1)
-counts <- read.table("Picrust2/pathway_abundance.tsv", header = T, sep="\t", row.names = 1)
-counts<- round(counts)
+counts <- read.delim("TP_gene-expression.csv", header = T, sep=",", row.names= 1)
 counts[1:3,1:3]
-ncol(counts)
 
-
-
-coldata <- read.table("merge_map.csv", header = TRUE, sep = ",",row.names = 1)
 coldata<-coldata[colnames(counts),]
-coldata[1:3,1:3]
-write.csv(coldata,"merge_map.csv")
-
+counts <- counts[, rownames(coldata) ]
 all((colnames(counts)==rownames(coldata))==T)
 
-setwd("/Users/birongzhang/Downloads/James/James_new/DESeq2/Picrust2")
-coldata$Treatment = factor(coldata$Treatment, levels=c("D","ND")) ## 设置柱条的顺序
+head(colnames(counts))
+head(rownames(coldata))
+
+write.csv(coldata, "clin_metadata.csv",row.names = T)
+write.csv(counts, "clin_counts.csv")
+
+
+###DESeq2 dim(1309,9)
 ds <- DESeqDataSetFromMatrix(countData = counts,
                              colData = coldata,
                              design = ~ Treatment)
 ds
-ds <- estimateSizeFactors(ds,type = c("poscounts"))
+
+## filter
+## keep <- rowSums(counts(ds)) >= 300
+table(keep)
+
+ds <- ds[keep,]
+ds
+# normalized data_ Corrected data using the median of ratios method
+# d<-t(t(counts(dds))/sizeFactors(dds)) %>% data.frame()
+dds=estimateSizeFactors(ds,type = c("poscounts"))
+normlised <- counts(dds, normalized=TRUE) %>% data.frame()
+write.csv(normlised, "DESeq2_Normalised.csv")
 
 ds = DESeq(ds)
 alpha=0.05
-res = results(ds, contrast=c("Treatment", "D","ND"), alpha=alpha)
-res<-as.data.frame(res) %>% arrange(padj)
-write.csv(res,"res.csv")
 
-res <- read.table("res.csv", header = T, sep=",", row.names = 1)
-res_sig_up<-res %>% dplyr::filter(log2FoldChange>=1 & padj < 0.05) %>% arrange(padj)
-write.csv(res_sig_up,"res_sig_up.csv")
 
-res_sig_down<-res %>% dplyr::filter(log2FoldChange <= (-1) & padj < 0.05) %>% arrange(padj)
-write.csv(res_sig_down,"res_sig_down.csv")
-
-# PCA plot
+#########PCA plot
+levels(coldata$Treatment)
 vsd <- varianceStabilizingTransformation(ds)
+p<-pcaplot(vsd, intgroup = c("Treatment"), text_labels = FALSE)+  theme_bw()+  
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        panel.border = element_blank(),        
+        axis.line = element_line(colour = "black",size=1),
+        plot.title = element_text(hjust = 0.5))+
+  labs(title = "PCAplot")
+p
+ggsave("PCAplot.png",p,dpi=600, width = 8, height = 6)
 
-p<-plotPCA(vsd, intgroup = c("Treatment"))+
+
+p<-pcaplot(vsd, intgroup = c("Treatment"), text_labels = TRUE)+  
   theme_bw()+  
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(), 
         panel.border = element_blank(),        
-        axis.line = element_line(colour = "black",size=2),
+        axis.line = element_line(colour = "black",size=1),
         plot.title = element_text(hjust = 0.5))+
-  labs(title = "PCA plot")
+  labs(title = "PCAplot")
 p
-ggsave("PCAplot.png", p, dpi=300, width=6)
-
-# volcano plot
-p<- EnhancedVolcano(res,
-               lab = rownames(res),
-                x = 'log2FoldChange',
-                y = 'padj',
-                title = 'D vs ND',
-                pCutoff = 0.05,
-                FCcutoff = 1,
-                pointSize = 3.0,
-                labSize = 3.0,
-                col=c('black', 'blue', 'green', 'red3'),
-                shape = 8,
-                colAlpha = 1)
-p
-ggsave("Volcanoplot.png", p, dpi=300, width=8)
+ggsave("PCAplot on samples.png",p,dpi=600, width = 8, height = 6)
 
 
 
 
-
-#######reference#######
-https://lashlock.github.io/compbio/R_presentation.html
-https://www.jianshu.com/p/f685149ea247
-http://www.360doc.com/content/19/1224/14/68068867_881789444.shtml
-https://www.jianshu.com/p/26511d3360c8
-https://www.jianshu.com/p/6dcceba1f917
-http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
-https://www.jianshu.com/p/b55276e46f0c
-https://zhuanlan.zhihu.com/p/59731307
-
-
-###########plotPCA###########
-res <- res[order(res$padj),]
+################ exceptional_responders Vs early_rapid_responders
+# save the results
+levels(coldata$Treatment)
+res = results(ds, contrast=c("Treatment","exceptional_responders", "early_rapid_responders"), alpha=0.05)
+res<-res %>% data.frame() %>%  arrange(padj)
 head(res)
 
-par(mfrow=c(1,1))
-# Make a basic volcano plot
-with(res, plot(log2FoldChange, -log10(pvalue), pch=20, main="Volcano plot", xlim=c(-3,3)))
+fc_cutoff <- 2
+padj_cutoff <- 0.05
+res$Tag <- "NC"
+res$Tag[res$log2FoldChange > log2(fc_cutoff) & res$padj < padj_cutoff] <- "Up"
+res$Tag[res$log2FoldChange < (-1 * log2(fc_cutoff)) & res$padj < padj_cutoff] <- "Down"
+table(res$Tag )
+# Down    NC    Up 
+# 197 56201   204 
 
-# Add colored points: blue if padj<0.01, red if log2FC>1 and padj<0.05)
-with(subset(res, padj<.01 ), points(log2FoldChange, -log10(pvalue), pch=20, col="blue"))
-with(subset(res, padj<.01 & abs(log2FoldChange)>2), points(log2FoldChange, -log10(pvalue), pch=20, col="red"))
+write.csv(res, "DESeq2.csv")
 
+res_sig <- res[res$Tag == "Up" | res$Tag == "Down",]
+write.csv(res_sig, "DESeq2_sig.csv")
 
-vsdata <- vst(ds, blind=FALSE)
-plotPCA(vsdata, intgroup="Treatment") 
+library(rtracklayer)
+library(AnnotationDbi)
+library(GenomicFeatures)
+library(tidyverse)
+library(biomaRt)
 
+# Human
+###gene annotation
+dataFilt.brca <- read.delim("DESeq2.csv",header=T,sep = ",",row.names = 1)
+head(dataFilt.brca)
+ensembl = useMart("ENSEMBL_MART_ENSEMBL",dataset="hsapiens_gene_ensembl", host="uswest.ensembl.org")
 
+##### 'mgi_symbol' => 'external_gene_name'
+bioM.res<-getBM(attributes=c('ensembl_gene_id','hgnc_symbol',"entrezgene_id"), 
+                filters = 'ensembl_gene_id', values = rownames(dataFilt.brca), mart = ensembl)
+dim(bioM.res) 
+colnames(bioM.res) <- c("Geneid","hgnc_symbol","GeneID")
+bioM.res[1:3,1:3]
 
-ds<-estimateSizeFactors(ds)
-raw<-SummarizedExperiment(counts(ds, normalized=FALSE), colData=colData(ds))
-nor<-SummarizedExperiment(counts(ds, normalized=TRUE), colData=colData(ds))
+dataFilt.brca.anno<-cbind(bioM.res[match(rownames(dataFilt.brca), bioM.res$Geneid),],dataFilt.brca)
+dataFilt.brca.anno[1:3,1:3]
 
+write.csv(dataFilt.brca.anno, "DESeq2_anno.csv",row.names = F)
 
-vsd<- vst(ds)
-rld<- rlog(ds)
+res_sig <- dataFilt.brca.anno[dataFilt.brca.anno$Tag == "Up" | dataFilt.brca.anno$Tag == "Down",]
+write.csv(res_sig, "DESeq2_sig_anno.csv",row.names = F)
 
-vsd <- varianceStabilizingTransformation(ds)
-
-pdf("PCA.pdf")
-plotPCA(DESeqTrannsform(raw), intgroup=c("Treatment"))
-
-plotPCA(DESeqTrannsform(nor), intgroup=c("Treatment"))
-
-plotPCA(vsd, intgroup=c("Treatment"))
-
-plotPCA(rld, intgroup=c("Treatment"))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+####select
+res_up<-res_sig %>% dplyr::filter(res_sig$Tag == "Up") %>% arrange(padj)
+res_down<-res_sig %>% dplyr::filter(res_sig$Tag == "Down") %>% arrange(padj)
+selectLab_italics<-c(head(res_up$hgnc_symbol,10),head(res_down$hgnc_symbol,10))
 
 
+res<-dataFilt.brca.anno
+# create custom key-value pairs for 'high', 'low', 'mid' expression by fold-change
+# this can be achieved with nested ifelse statements
+keyvals <- ifelse(
+  res$log2FoldChange < -1 & res$padj < 0.05, 'royalblue',
+  ifelse(res$log2FoldChange > 1 & res$padj < 0.05, 'red',
+         'black'))
+keyvals[is.na(keyvals)] <- 'black'
 
-
-
-
-
-
-
-
-
-
-
-
+names(keyvals)[keyvals == 'royalblue'] <- 'down regualation'
+names(keyvals)[keyvals == 'black'] <- 'NC'
+names(keyvals)[keyvals == 'red'] <- 'up regulation'
 
 
 
 
 
+# Volcano plot
+res$Tag <- as.factor(res$Tag)
+col_li <- c("#cd2631", "#e9e9e9", "#4b79ae")
+names(col_li) <- c("up", "NC", "down")
+deseq2_info <- res %>% group_by(Tag) %>% summarise(Num = n())
+deseq2_info$Text <- sprintf("N=%d", deseq2_info$Num)
+deseq2_info <- deseq2_info[which(deseq2_info$Tag != "NC"), ]
+deseq2_info$x <- -5 # for label text position
+deseq2_info$x[deseq2_info$Tag== "Up"] <- -deseq2_info$x[deseq2_info$Tag == "Down"]
+deseq2_info
+
+p<- EnhancedVolcano(res,
+                    lab = res$hgnc_symbol,
+                    x = 'log2FoldChange',
+                    y = 'padj',
+                    title = 'exceptional_responders VS. early_rapid_responders',
+                    selectLab = selectLab_italics,
+                    colCustom = keyvals,
+                    pCutoff = 0.05,
+                    FCcutoff = 1,
+                    pointSize = 2.0,
+                    labSize = 3.0,
+                    col=c('black', 'blue', 'green', 'red3'),
+                    shape = 16,
+                    colAlpha = 1)+geom_text(
+                      aes(x = x, y = 11, label = Text),
+                      data = deseq2_info,
+                      size = 9,
+                      color = "black"
+                    )
+p
+ggsave("Volcanoplot.png", p, dpi=300, width=8, height=6)
 
 
 
 
+
+
+# https://github.com/ctlab/fgsea
+# http://bioconductor.org/packages/devel/bioc/vignettes/fgsea/inst/doc/fgsea-tutorial.html
+############dload DESeq2 analysis result
+setwd("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2")
+res_entrez = read.table("DESeq2_anno.csv", sep=",", header=TRUE)
+res_entrez <- res
+colnames(res_entrez)[1] <- "ensembl_gene_id"
+colnames(res_entrez)[3] <- "entrezgene_id"
+head(res_entrez)
+
+## Remove any ensembl_gene_id duplicates
+res_entrez <- res_entrez[which(duplicated(res_entrez$ensembl_gene_id) == F), ]
+
+## Remove any NA values (reduces the data by quite a bit)
+res_entrez <- res_entrez%>% dplyr::filter(entrezgene_id != "NA")
+
+## Remove any entrezgene_id duplicates
+res_entrez <- res_entrez[which(duplicated(res_entrez$entrezgene_id) == F), ]
+
+## Remove any stat values (reduces the data by quite a bit)
+res_entrez <- res_entrez%>% dplyr::filter(stat  != "NA")
+
+#data conversionn
+# Create a vector of the gene unuiverse
+kegg_gene_list <- res_entrez$stat
+# Name vector with ENTREZ ids
+names(kegg_gene_list) <- res_entrez$entrezgene_id
+# omit any NA values 
+kegg_gene_list<-na.omit(kegg_gene_list)
+# sort the list in decreasing order (required for clusterProfiler)
+kegg_gene_list = sort(kegg_gene_list, decreasing = TRUE)
+head(kegg_gene_list)
+
+
+a<- res_entrez$stat
+table(a > 0)
+#FALSE  TRUE 
+#22369 21509 
+
+
+########GSEA
+setwd("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2/pathway")
+biocLite("GSEABase")
+install_version("rvcheck", version = "0.1.8", repos = "http://cran.us.r-project.org")
+
+library(data.table)
+library(fgsea)
+library(ggplot2)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(GSEABase)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(forcats)
+
+# http://bioinf.wehi.edu.au/software/MSigDB/
+# download reference
+
+# h
+load("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2/pathway/human_H_v5p2.rdata")
+h <- ldply (Hs.H, data.frame)
+head(h)
+write.csv(h,"H hallmark gene sets.csv")
+
+# C2 
+load("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2/pathway/human_c2_v5p2.rdata")
+c2 <- ldply (Hs.c2, data.frame)
+head(c2)
+write.csv(c2,"C2.csv")
+
+
+# C7 immunologic signatures 
+load("/Users/birongzhang/Downloads/Sheeba/TCGA/DESeq2/pathway/human_c7_v5p2.rdata")
+c7 <- ldply (Hs.c7, data.frame)
+head(c7)
+write.csv(c7,"C7 immunologic signatures .csv")
+
+## fgsea
+## C7 4872
+head(Hs.c7)
+head(kegg_gene_list)
+
+msig <- fgsea(pathways = Hs.c7, 
+                  stats    = kegg_gene_list,
+                  minSize  = 15,
+                  maxSize  = 500)
+
+msig_df <- msig%>% arrange(msig$padj) 
+msig_sig <- msig_df[msig_df$padj < 0.05, ] #1071
+
+msig_DF <- msig_df[,-8] %>% data.frame
+write.csv(msig_DF, "fgsea_c7_human.csv")
+
+msig_sig_DF <- msig_sig[,-8] %>% data.frame
+write.csv(msig_sig_DF, "fgsea_c7_human_sig.csv",quote=F)
+
+## barplot 
+topPathwaysUp <- msig[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- msig[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp,topPathwaysDown  )
+p<- ggplot(msig_sig[msig_sig$pathway %in% topPathways,], aes(x=NES, y=fct_reorder(pathway, NES), fill=NES)) + 
+  geom_bar(stat='identity') +
+  scale_fill_continuous(low='red', high='blue', guide=guide_colorbar(reverse=TRUE)) + 
+  labs(title="C7_top10")+
+  theme_minimal() + ylab(NULL)
+p
+ggsave("C7_significant_pathway_top15.eps", p, dpi=300, width=8, height=5)
+
+## dotplot
+png("C7_significant_pathway_top15_dotplot.png", width = 10, height = 6, units = 'in', res = 600)
+dotplot(as.matrix(msig), showCategory=15, split=".sign", title="C7_immunologic signatures_top20 significant") + facet_grid(.~.sign)
+dev.off()
+
+topPathwaysUp <- msig[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- msig[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+
+png("C7_significant_pathway_top20.png", width = 15, height = 6, units = 'in', res = 600)
+plotGseaTable(Hs.c7[topPathways], kegg_gene_list, msig, gseaParam=0.5)
+dev.off()
+
+
+## C2 3739
+msig <- fgsea(pathways = Hs.c2, 
+              stats    = kegg_gene_list,
+              minSize  = 15,
+              maxSize  = 500)
+
+msig_df <- msig%>% arrange(msig$padj)
+msig_sig <- msig_df[msig_df$padj < 0.05, ] #494
+
+msig_DF <- msig_df[,-8] %>% data.frame
+write.csv(msig_DF, "fgsea_c2_human.csv")
+
+msig_sig_DF <- msig_sig[,-8] %>% data.frame
+write.csv(msig_sig_DF, "fgsea_c2_human_sig.csv",quote=F)
+
+## barplot 
+topPathwaysUp <- msig[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- msig[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+p<- ggplot(msig_sig[msig_sig$pathway %in% topPathways,], aes(NES, fct_reorder(pathway, NES), fill=NES)) + 
+  geom_bar(stat='identity') +
+  scale_fill_continuous(low='red', high='blue', guide=guide_colorbar(reverse=TRUE)) + 
+  labs(title="C2_top10")+
+  theme_minimal() + ylab(NULL)
+p
+ggsave("C2_significant_pathway_top15.eps", p, dpi=300, width=8, height=5)
+
+## dotplot
+png("C2_significant_pathway_top15_dotplot.png", width = 10, height = 6, units = 'in', res = 600)
+dotplot(as.matrix(msig), showCategory=15, split=".sign", title="C2_immunologic signatures_top20 significant") + facet_grid(.~.sign)
+dev.off()
+
+topPathwaysUp <- msig[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- msig[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+
+png("C2_significant_pathway_top20.png", width = 15, height = 6, units = 'in', res = 600)
+plotGseaTable(Hs.c2[topPathways], kegg_gene_list, msig, gseaParam=0.5)
+dev.off()
+
+## h 50
+msig <- fgsea(pathways = Hs.H, 
+              stats    = kegg_gene_list,
+              minSize  = 15,
+              maxSize  = 500)
+
+msig_df <- msig%>% arrange(msig$padj)
+msig_sig <- msig_df[msig_df$padj  < 0.05, ] #18
+
+
+## barplot 
+p<- ggplot(msig_sig[1:18,], aes(NES, fct_reorder(pathway, NES), fill=NES)) + 
+  geom_bar(stat='identity') +
+  scale_fill_continuous(low='red', high='blue', guide=guide_colorbar(reverse=TRUE)) + 
+  labs(title="h_immunologic signatures_top15")+
+  theme_minimal() + ylab(NULL)
+p
+ggsave("h_significant_pathway_top15.eps", p, dpi=300, width=8, height=5)
+
+## dotplot
+png("h_significant_pathway_top15_dotplot.png", width = 10, height = 6, units = 'in', res = 600)
+dotplot(as.matrix(msig), showCategory=15, split=".sign", title="h_immunologic signatures_top20 significant") + facet_grid(.~.sign)
+dev.off()
+
+topPathwaysUp <- msig[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- msig[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+
+png("h_significant_pathway_top20.png", width = 15, height = 6, units = 'in', res = 600)
+plotGseaTable(Hs.h[topPathways], kegg_gene_list, msig, gseaParam=0.5)
+dev.off()
+
+
+msig_DF <- msig_df[,-8] %>% data.frame
+write.csv(msig_DF, "fgsea_h_human.csv")
+
+msig_sig_DF <- msig_sig[,-8] %>% data.frame
+write.csv(msig_sig_DF, "fgsea_h_human_sig.csv",quote=F)
